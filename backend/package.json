@@ -1,0 +1,26 @@
+{
+  "name": "price-tracker-backend",
+  "version": "1.0.0",
+  "description": "Price Tracker backend — Express + Playwright scraper",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "scrape:headed": "node scraper/run-headed.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.x",
+    "axios": "^1.x",
+    "cheerio": "^1.x",
+    "cors": "^2.x",
+    "dotenv": "^16.x",
+    "express": "^4.x",
+    "playwright-core": "^1.x"
+  },
+  "devDependencies": {
+    "nodemon": "^3.x"
+  }
+}

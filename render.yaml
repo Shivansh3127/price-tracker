@@ -1,0 +1,30 @@
+# render.yaml
+# Render Blueprint — defines the backend web service declaratively.
+# Commit this file to the repo root so Render auto-detects it.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: price-tracker-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: bash build.sh
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false          # fill in on Render dashboard
+      - key: SUPABASE_SERVICE_KEY
+        sync: false          # fill in on Render dashboard
+      - key: CRON_SECRET
+        sync: false          # fill in on Render dashboard
+      - key: STORE_BASE_URL
+        value: https://demo.inelabteamdev.com
+      - key: FRONTEND_URL
+        sync: false          # fill in after Vercel deploy
+      - key: PORT
+        value: 3001
+    healthCheckPath: /health
+    autoDeploy: true         # redeploy on every push to main

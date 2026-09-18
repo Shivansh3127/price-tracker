@@ -15,20 +15,23 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // ── Search ────────────────────────────────────────────────
-  searchProducts: (q) => request(`/api/products/search?q=${encodeURIComponent(q)}`),
+  // ── Product Search (calls backend which scrapes the store) ────
+  searchProducts: (q) =>
+    request(`/api/products/search?q=${encodeURIComponent(q)}`),
 
-  // ── Tracked Products ──────────────────────────────────────
+  // ── Tracked Products ──────────────────────────────────────────
   getTracked: () => request('/api/tracked'),
-  addTracked: (body) => request('/api/tracked', { method: 'POST', body: JSON.stringify(body) }),
-  removeTracked: (id) => request(`/api/tracked/${id}`, { method: 'DELETE' }),
+  addTracked: (body) =>
+    request('/api/tracked', { method: 'POST', body: JSON.stringify(body) }),
+  removeTracked: (id) =>
+    request(`/api/tracked/${id}`, { method: 'DELETE' }),
 
-  // ── Price History ─────────────────────────────────────────
+  // ── Price History ─────────────────────────────────────────────
   getHistory: (productId, params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/api/history/${productId}${qs ? '?' + qs : ''}`);
   },
 
-  // ── Scrape Logs ───────────────────────────────────────────
+  // ── Scrape Logs ───────────────────────────────────────────────
   getLogs: (productId) => request(`/api/logs/${productId}`),
 };

@@ -1,7 +1,6 @@
 // backend/src/routes/history.js
-// Routes:
-//   GET /api/history/:productId          Price history for a product
-//   GET /api/logs/:productId             Scrape logs for a product
+// Read endpoints for price history and scrape logs.
+// Mounted at both /api/history and /api/logs in index.js.
 
 'use strict';
 
@@ -9,12 +8,12 @@ const express   = require('express');
 const router    = express.Router();
 const supabase  = require('../db/supabase');
 
-// GET /api/history/:productId?limit=50&from=ISO&to=ISO
-router.get('/:productId', async (req, res) => {
+// GET /api/history/:productId?limit=200&from=ISO&to=ISO
+router.get('/history/:productId', async (req, res) => {
   const { productId } = req.params;
-  const limit  = Math.min(parseInt(req.query.limit || '200', 10), 500);
-  const from   = req.query.from;   // optional ISO date
-  const to     = req.query.to;     // optional ISO date
+  const limit = Math.min(parseInt(req.query.limit || '200', 10), 500);
+  const from  = req.query.from;
+  const to    = req.query.to;
 
   try {
     let query = supabase
@@ -29,16 +28,15 @@ router.get('/:productId', async (req, res) => {
 
     const { data, error } = await query;
     if (error) throw error;
-
     res.json({ history: data || [] });
   } catch (err) {
-    console.error('/history error:', err.message);
+    console.error('GET /history error:', err.message);
     res.status(500).json({ error: 'Failed to fetch history', detail: err.message });
   }
 });
 
 // GET /api/logs/:productId?limit=50
-router.get('/:productId', async (req, res) => {
+router.get('/logs/:productId', async (req, res) => {
   const { productId } = req.params;
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
 
@@ -53,7 +51,7 @@ router.get('/:productId', async (req, res) => {
     if (error) throw error;
     res.json({ logs: data || [] });
   } catch (err) {
-    console.error('/logs error:', err.message);
+    console.error('GET /logs error:', err.message);
     res.status(500).json({ error: 'Failed to fetch logs', detail: err.message });
   }
 });

@@ -12,7 +12,7 @@
 
 'use strict';
 
-const { chromium } = require('playwright-core');
+const { chromium } = require('playwright');
 const {
   PRICE_SELECTORS,
   STOCK_SELECTORS,

@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# backend/build.sh
-# Render build script — runs during the "Build Command" phase.
-# Installs Node deps and then downloads Playwright's Chromium browser binary.
-#
-# On Render free tier, the filesystem is ephemeral, so Playwright's browser
-# must be re-downloaded on every deploy. This script handles that.
+# backend/build.sh — Render build script
+# Installs Node deps then downloads the Playwright Chromium browser binary.
+# NOTE: --with-deps is intentionally OMITTED — Render's build environment
+# does not allow sudo/root, and the required system libs are pre-installed
+# on Render's Ubuntu image.
 
-set -e  # exit immediately on any error
+set -e
 
 echo "=== Installing Node.js dependencies ==="
 npm install
 
 echo "=== Installing Playwright Chromium browser ==="
-# --with-deps installs system-level OS packages Chromium needs (fonts, libs)
-npx playwright install chromium --with-deps
+node_modules/.bin/playwright install chromium
 
 echo "=== Build complete ==="

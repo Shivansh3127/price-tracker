@@ -13,18 +13,19 @@
 //                     e.g. "SKU MER-10426" → /product/426
 //   - No search API:  1000 products shown on listing; filtered client-side
 //
-// Detail page (confirmed via live network/DOM inspection):
-//   - price-block HTML after reveal:
-//       <div class="pw-m4">
-//         <output class="pv-m4">₹9,999</output>
-//         <span class="mr-m4">₹14,999</span>
-//         <span class="bd-m4">33% off</span>
-//         <span class="st-m4">In stock</span>
-//         <span class="dl-m4">Free delivery</span>
-//       </div>
-//   - CSS class names are dynamic (come from /api/layout; change per revision)
-//   - Cookie overlay keeps reveal button disabled until cookies accepted
-//   - Reveal mechanism: accept cookies → JS mouseover dispatch → JS click
+// Detail page (confirmed via live DOM + React-fiber inspection):
+//   - /api/product/{id}  →  name, brand, specs, reviews — NO price field
+//   - /api/layout        →  dynamic CSS class names (revision-locked)
+//   - Anti-bot hover gate: React state tracks
+//       { hoverAt, lastMoveAt, moves[], req: {minMoves:8, minDwellMs:600} }
+//     The reveal button stays disabled until ≥8 distinct mousemove events
+//     land inside .price-block AND the cursor dwells for ≥600 ms.
+//     A single hover() / dispatchEvent() does NOT satisfy this.
+//   - WORKING STRATEGY: 15 zigzag CDP mouse moves (70 ms apart) inside the
+//     price block, starting from outside it, then 900 ms dwell.
+//     Button enables → click → price appears.
+//   - priceCarrier:"split" → zero-width spaces (U+200B) between digit spans;
+//     parsePrice strips all non-digit characters before parsing.
 
 'use strict';
 
@@ -55,18 +56,8 @@ function getLaunchOptions(headed = false) {
   };
 }
 
-// ── Cookie helper ─────────────────────────────────────────────
-
-async function acceptCookies(page) {
-  try {
-    await page.waitForSelector('.cookie-banner', { timeout: 4000 });
-    await page.click('.cookie-actions .btn-primary', { timeout: 4000 });
-    await page.waitForTimeout(600);
-    console.log('[scraper] Cookies accepted');
-  } catch (_) {
-    // No banner or already accepted
-  }
-}
+// (acceptCookies removed — the store's reveal gate is not cookie-based;
+//  it requires genuine mousemove events; see playwrightScrapePDP below.)
 
 // ── SKU → product ID helper ───────────────────────────────────
 
@@ -87,13 +78,21 @@ function skuToProductId(skuText) {
 /**
  * Scrapes a product detail page — price, stock, name.
  *
- * Strategy:
- *  1. Intercept /api/layout response to get dynamic CSS class names.
- *  2. Accept cookie banner (re-enables all mouse/keyboard events).
- *  3. Dispatch JS mouseover on .price-block to trigger reveal mechanism.
- *  4. JS-click the reveal button (bypasses disabled state if needed).
- *  5. Wait 10s for price to render.
- *  6. Read price/stock using the intercepted class names.
+ * Anti-bot hover gate (confirmed via React-fiber inspection):
+ *   The store's price-block React component tracks
+ *     { hoverAt, lastMoveAt, moves[], req: {minMoves:8, minDwellMs:600} }
+ *   The reveal button stays disabled until ≥8 distinct mousemove events
+ *   have been recorded INSIDE .price-block AND the cursor has dwelled ≥600 ms.
+ *
+ * Working strategy:
+ *  1. Navigate directly to the PDP (no listing-page pre-visit needed).
+ *  2. Intercept /api/layout to capture dynamic CSS class names.
+ *  3. Scroll .price-block into view, then move the mouse from outside
+ *     the element and make 15 zigzag moves inside it (70 ms apart).
+ *  4. Dwell 900 ms (> minDwellMs:600).
+ *  5. Wait for button to enable, then click it.
+ *  6. Read price from the pv-* class element (zero-width spaces stripped
+ *     by parsePrice via /[^\d.]/g replacement).
  *
  * @param {string}  url
  * @param {boolean} [headed=false]
@@ -126,86 +125,59 @@ async function playwrightScrapePDP(url, headed = false) {
       }
     });
 
-    // ── CRITICAL: Accept cookies on listing page first ─────────
-    // The INE store uses cookie consent as a gate for price reveal.
-    // Without it, the Reveal Price button stays permanently hidden.
-    // We must:
-    //   1. Load the listing page
-    //   2. Accept cookies (sets "consent: granted" cookie)
-    //   3. Then navigate to the product URL
-    await page.goto(STORE_BASE, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT_MS });
-    await page.waitForTimeout(1500);
+    // ── Step 2: Navigate directly to the product detail page ──
+    // Use 'load' (not 'networkidle') — PDP has background polls that
+    // prevent networkidle from ever firing (causes 30s timeout).
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(url, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
+    await page.waitForSelector('.price-block', { state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(2000); // allow React to fully hydrate
 
-    // Wait up to 10s for cookie banner then accept it
-    try {
-      await page.waitForSelector('.cookie-banner', { timeout: 10000 });
-      await page.click('.cookie-actions .btn-primary');
-      await page.waitForTimeout(600);
-      await page.waitForSelector('.cookie-overlay', { state: 'hidden', timeout: 5000 })
-        .catch(() => {});
-      console.log('[scraper] Cookies accepted on listing page');
-    } catch (_) {
-      console.log('[scraper] Cookie banner not found — proceeding anyway');
-    }
-
-    // Now navigate to the actual product URL
-    await page.goto(url, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT_MS });
-    await page.waitForTimeout(1500);
-
-    // ── Step 4: Trigger price reveal via real mouse coordinates ──
-    // page.hover() alone does NOT trigger React's onMouseEnter reliably.
-    // page.mouse.move() with explicit bounding-box coordinates DOES.
-    // Confirmed via live debugging: button.disabled goes false after mouse.move.
-
-    // Get product name from detail page
+    // Get product name
     const name = await page.textContent('h1').catch(() => null) || 'Unknown Product';
 
+    // ── Step 3: Trigger price reveal via zigzag mouse moves ────
+    // The price-block component requires:
+    //   minMoves: 8   — at least 8 distinct mousemove events inside the element
+    //   minDwellMs: 600 — cursor must stay ≥600 ms after first move
+    // A single hover() / dispatchEvent() satisfies neither requirement.
     await page.locator('.price-block').scrollIntoViewIfNeeded().catch(() => {});
-
-    // First move mouse away (ensures React registers a proper mouseenter)
-    await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
 
-    // Move to the centre of the price block using real CDP coordinates
     const box = await page.locator('.price-block').boundingBox().catch(() => null);
     if (box) {
-      // Single move to centre
-      await page.mouse.move(
-        box.x + box.width  / 2,
-        box.y + box.height / 2,
-        { steps: 10 }   // gradual move fires intermediate mousemove events
-      );
-      await page.waitForTimeout(1000);
+      // Start from outside the price block so React detects entry
+      await page.mouse.move(box.x - 80, box.y - 80);
+      await page.waitForTimeout(100);
 
-      // If button still disabled, try multi-position hover across the block
-      let stillDisabled = await page.evaluate(
-        () => !!document.querySelector('[aria-label="Reveal price"]')?.disabled
-      );
-      if (stillDisabled) {
-        for (const [dx, dy] of [[0.2,0.3],[0.5,0.5],[0.7,0.6],[0.5,0.8]]) {
-          await page.mouse.move(box.x + box.width*dx, box.y + box.height*dy, { steps: 5 });
-          await page.waitForTimeout(400);
-        }
+      // 15 zigzag moves inside the block (well above minMoves:8)
+      for (let i = 0; i < 15; i++) {
+        const x = box.x + box.width  * (0.1 + 0.8 * ((i % 5) / 4));
+        const y = box.y + box.height * (0.2 + 0.6 * (Math.floor(i / 5) / 3));
+        await page.mouse.move(x, y);
+        await page.waitForTimeout(70);
       }
-    } else {
-      await page.locator('.price-block').hover({ timeout: 5000 }).catch(() => {});
-    }
-    await page.waitForTimeout(1000);
 
-    // Wait for button to become enabled, then click it
+      // Dwell 900 ms at centre (well above minDwellMs:600)
+      await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+      await page.waitForTimeout(900);
+    } else {
+      console.warn('[scraper] Could not get bounding box for .price-block');
+    }
+
+    // Wait for button to enable (up to 3s) then click
     await page.waitForFunction(
       () => !document.querySelector('[aria-label="Reveal price"]')?.disabled,
-      { timeout: 8000 }
-    ).catch(() => {});
+      { timeout: 3000 }
+    ).catch(() => console.warn('[scraper] Reveal button still disabled after hover'));
 
-    await page.click('[aria-label="Reveal price"]', { timeout: 5000 })
-      .catch(() =>
-        // Fallback JS click
-        page.evaluate(() => document.querySelector('[aria-label="Reveal price"]')?.click())
-      );
+    await page.click('[aria-label="Reveal price"]', { timeout: 3000 })
+      .catch(() => page.evaluate(
+        () => document.querySelector('[aria-label="Reveal price"]')?.click()
+      ));
+
 
     // ── Step 5: Wait for price to render ──────────────────────
-    // Poll until the price-block no longer says "hidden" / "Loading"
     await page.waitForFunction(
       () => {
         const block = document.querySelector('.price-block');

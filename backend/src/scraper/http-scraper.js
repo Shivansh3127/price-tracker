@@ -151,9 +151,11 @@ function extractFirstFrom($card, $, selectors) {
  */
 function parsePrice(raw) {
   if (!raw) return null;
-  const match = raw.replace(/,/g, '').match(/[\d]+(?:\.\d+)?/);
-  if (!match) return null;
-  const num = parseFloat(match[0]);
+  // Strip everything except digits and decimal point.
+  // The store uses priceCarrier:"split" which injects zero-width spaces
+  // (U+200B) between digit spans — a plain /,/ replace misses those.
+  const cleaned = raw.replace(/[^\d.]/g, '');
+  const num = parseFloat(cleaned);
   return num > 0 ? num : null;
 }
 

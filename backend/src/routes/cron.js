@@ -90,7 +90,7 @@ router.post('/scrape', async (req, res) => {
 router.get('/status', (_req, res) => {
   res.json({
     message: 'Cron endpoint is live',
-    schedule: 'Every 2 hours via cron-job.org',
+    schedule: 'Every 15 minutes via cron-job.org',
     endpoint: 'POST /api/cron/scrape',
     auth: 'X-Cron-Token header required',
   });

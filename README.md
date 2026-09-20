@@ -154,7 +154,7 @@ Track at least one product via the UI first. A visible browser window will open 
 
 ## Scraping Schedule
 
-Scrapes run **every 2 hours**, triggered externally by [cron-job.org](https://cron-job.org) hitting:
+Scrapes run **every 15 minutes**, triggered externally by [cron-job.org](https://cron-job.org) hitting:
 
 ```
 POST https://price-tracker-backend-5re1.onrender.com/api/cron/scrape
@@ -167,7 +167,7 @@ The schedule is external (not an `setInterval` inside Node) because **Render's f
 1. URL: your Render URL + `/api/cron/scrape`
 2. Method: `POST`
 3. Custom header: `X-Cron-Token` = value of `CRON_SECRET`
-4. Schedule: `0 */2 * * *` (every 2 hours)
+4. Schedule: `*/15 * * * *` (every 15 minutes)
 
 ---
 

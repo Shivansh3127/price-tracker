@@ -125,7 +125,7 @@ export default function Dashboard() {
         {[
           { label: 'Tracked',   value: activeCount,   color: 'var(--accent-violet)' },
           { label: 'In Stock',  value: inStockCount,   color: 'var(--accent-green)'  },
-          { label: 'Monitored', value: 'Every 2h',     color: 'var(--accent-blue)'   },
+          { label: 'Monitored', value: 'Every 15m',   color: 'var(--accent-blue)'   },
         ].map(({ label, value, color }) => (
           <div key={label} className="card" style={{ flex: '1', minWidth: '140px', textAlign: 'center' }}>
             <p style={{ color, fontSize: '1.8rem', fontWeight: 700 }}>{value}</p>

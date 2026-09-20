@@ -51,31 +51,6 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', ts: new Date().toISOString() });
 });
 
-// ── Playwright diagnostic (temporary — remove after debugging) ─
-app.get('/api/debug/playwright', async (_req, res) => {
-  try {
-    const { chromium } = require('playwright');
-    const browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    });
-    const page = await browser.newPage();
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('https://demo.inelabteamdev.com/', { waitUntil: 'networkidle', timeout: 25000 });
-    await page.waitForTimeout(2000);
-
-    const tileCount       = await page.locator('article.tile').count();
-    const cookieVisible   = await page.locator('.cookie-banner').isVisible().catch(() => false);
-    const title           = await page.title();
-    const bodySnip        = await page.evaluate(() => document.body.innerHTML.slice(0, 600));
-
-    await browser.close();
-    res.json({ ok: true, title, tileCount, cookieVisible, bodySnip });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message, stack: e.stack?.slice(0, 600) });
-  }
-});
-
 // ── 404 ───────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 

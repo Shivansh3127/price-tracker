@@ -26,5 +26,7 @@ services:
         sync: false          # fill in after Vercel deploy
       - key: PORT
         value: 3001
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"           # store Chromium in node_modules, not ~/.cache
     healthCheckPath: /health
     autoDeploy: true         # redeploy on every push to main

@@ -35,6 +35,12 @@ const PAGE_TIMEOUT_MS = 30_000;
 const STORE_BASE = process.env.STORE_BASE_URL || 'https://demo.inelabteamdev.com';
 
 // ── Launch options ─────────────────────────────────────────────
+// PLAYWRIGHT_BROWSERS_PATH=0 → Playwright looks for Chromium inside
+// node_modules (installed by build.sh) rather than ~/.cache/ms-playwright/
+// Required on Render where the home-dir cache may not persist at runtime.
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+}
 
 function getLaunchOptions(headed = false) {
   return {
@@ -44,6 +50,7 @@ function getLaunchOptions(headed = false) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--disable-software-rasterizer',
     ],
   };
 }

@@ -26,3 +26,10 @@ npm-debug.log*
 # Playwright
 /test-results/
 /playwright-report/
+# Debug / test scripts (not part of submission)
+backend/cookie-test.js
+backend/test-hover.js
+backend/test-reveal-debug.js
+backend/test-stock.js
+test-price.js
+screenshots/

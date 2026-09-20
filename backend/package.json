@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "scrape:headed": "node scraper/run-headed.js"
+    "scrape:headed": "node scraper/run-headed.js",
+    "scrape:demo": "node scraper/run-headed-demo.js"
   },
   "engines": {
     "node": ">=18"

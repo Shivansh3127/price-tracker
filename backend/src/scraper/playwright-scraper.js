@@ -119,26 +119,71 @@ async function playwrightScrapePDP(url, headed = false) {
       }
     });
 
+    // ── CRITICAL: Accept cookies on listing page first ─────────
+    // The INE store uses cookie consent as a gate for price reveal.
+    // Without it, the Reveal Price button stays permanently hidden.
+    // We must:
+    //   1. Load the listing page
+    //   2. Accept cookies (sets "consent: granted" cookie)
+    //   3. Then navigate to the product URL
+    await page.goto(STORE_BASE, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT_MS });
+    await page.waitForTimeout(1500);
+
+    // Wait up to 10s for cookie banner then accept it
+    try {
+      await page.waitForSelector('.cookie-banner', { timeout: 10000 });
+      await page.click('.cookie-actions .btn-primary');
+      await page.waitForTimeout(600);
+      await page.waitForSelector('.cookie-overlay', { state: 'hidden', timeout: 5000 })
+        .catch(() => {});
+      console.log('[scraper] Cookies accepted on listing page');
+    } catch (_) {
+      console.log('[scraper] Cookie banner not found — proceeding anyway');
+    }
+
+    // Now navigate to the actual product URL
     await page.goto(url, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT_MS });
     await page.waitForTimeout(1500);
 
-    // ── Step 2: Accept cookies ─────────────────────────────────
-    await acceptCookies(page);
+    // ── Step 4: Trigger price reveal via real mouse coordinates ──
+    // page.hover() alone does NOT trigger React's onMouseEnter reliably.
+    // page.mouse.move() with explicit bounding-box coordinates DOES.
+    // Confirmed via live debugging: button.disabled goes false after mouse.move.
 
-    // ── Step 3: Get product name ───────────────────────────────
-    const name = await page.textContent('h1').catch(() => null)
-              || 'Unknown Product';
-
-    // ── Step 4: Trigger price reveal via Playwright native hover ──
-    // The cookie overlay was blocking mouse events before acceptance.
-    // Now hover with real browser pointer (CDP-level) — triggers React onMouseEnter
-    // which enables the Reveal Price button.
-    await page.waitForSelector('.cookie-overlay', { state: 'hidden', timeout: 5000 })
-      .catch(() => {}); // overlay may already be gone
+    // Get product name from detail page
+    const name = await page.textContent('h1').catch(() => null) || 'Unknown Product';
 
     await page.locator('.price-block').scrollIntoViewIfNeeded().catch(() => {});
-    await page.locator('.price-block').hover({ timeout: 8000 });
-    await page.waitForTimeout(1500);
+
+    // First move mouse away (ensures React registers a proper mouseenter)
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+
+    // Move to the centre of the price block using real CDP coordinates
+    const box = await page.locator('.price-block').boundingBox().catch(() => null);
+    if (box) {
+      // Single move to centre
+      await page.mouse.move(
+        box.x + box.width  / 2,
+        box.y + box.height / 2,
+        { steps: 10 }   // gradual move fires intermediate mousemove events
+      );
+      await page.waitForTimeout(1000);
+
+      // If button still disabled, try multi-position hover across the block
+      let stillDisabled = await page.evaluate(
+        () => !!document.querySelector('[aria-label="Reveal price"]')?.disabled
+      );
+      if (stillDisabled) {
+        for (const [dx, dy] of [[0.2,0.3],[0.5,0.5],[0.7,0.6],[0.5,0.8]]) {
+          await page.mouse.move(box.x + box.width*dx, box.y + box.height*dy, { steps: 5 });
+          await page.waitForTimeout(400);
+        }
+      }
+    } else {
+      await page.locator('.price-block').hover({ timeout: 5000 }).catch(() => {});
+    }
+    await page.waitForTimeout(1000);
 
     // Wait for button to become enabled, then click it
     await page.waitForFunction(
@@ -148,7 +193,7 @@ async function playwrightScrapePDP(url, headed = false) {
 
     await page.click('[aria-label="Reveal price"]', { timeout: 5000 })
       .catch(() =>
-        // Fallback JS click if Playwright click fails
+        // Fallback JS click
         page.evaluate(() => document.querySelector('[aria-label="Reveal price"]')?.click())
       );
 

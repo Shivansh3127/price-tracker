@@ -154,28 +154,29 @@ async function scrapeTrackedProduct(tracked, headed = false) {
 /**
  * Searches the mock store listing/search page for products matching `query`.
  * Returns an array of product stubs.
+ *
+ * NOTE: This mock store has specific product names (e.g. "Ironwood Trackpad",
+ * "Vantablack Boot"). If the keyword doesn't match any name we return ALL
+ * products so the user can see and track what's available.
  */
 async function searchProducts(query, headed = false) {
-  // Try the search URL pattern first, then fall back to listing root
-  const searchUrl = `${STORE_BASE}/search?q=${encodeURIComponent(query)}`;
   const listingUrl = STORE_BASE;
 
-  console.log(`[scraper] Searching for "${query}" at ${searchUrl}`);
+  console.log(`[scraper] Searching for "${query}" — loading listing page`);
 
-  // Fast path first
-  let httpResult = await httpScrapeListings(searchUrl);
+  // Fast HTTP path (will likely detect SPA and return type:'spa')
+  const httpResult = await httpScrapeListings(listingUrl);
   if (httpResult.type === 'success' && httpResult.products?.length > 0) {
-    return filterByQuery(httpResult.products, query);
+    const filtered = filterByQuery(httpResult.products, query);
+    return filtered.length > 0 ? filtered : httpResult.products;
   }
 
-  // Playwright path
+  // Playwright path — always scrapes the listing root
   try {
-    let products = await playwrightScrapeListings(searchUrl, headed);
-    if (products.length > 0) return filterByQuery(products, query);
-
-    // If search URL returned nothing, try root listing
-    products = await playwrightScrapeListings(listingUrl, headed);
-    return filterByQuery(products, query);
+    const products = await playwrightScrapeListings(listingUrl, headed);
+    const filtered  = filterByQuery(products, query);
+    // If keyword matched nothing, return all products so user can browse
+    return filtered.length > 0 ? filtered : products;
   } catch (err) {
     console.error(`[scraper] searchProducts error: ${err.message}`);
     return [];

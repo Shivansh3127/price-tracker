@@ -85,7 +85,7 @@ export default function ProductDetail() {
           {latestHistory && (
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-green)' }}>
-                ${latestHistory.price?.toFixed(2)}
+                ₹{latestHistory.price?.toLocaleString('en-IN')}
               </p>
               <StockBadge status={latestHistory.stock_status} />
               <p className="text-sm text-muted mt-1">

@@ -54,7 +54,7 @@ export default function ProductCard({ item, onRemoved }) {
       {/* Price */}
       <div className="flex items-center justify-between mt-1">
         <span style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent-green)' }}>
-          {price != null ? `$${price.toFixed(2)}` : '—'}
+          {price != null ? `₹${price.toLocaleString('en-IN')}` : '—'}
         </span>
         <StockBadge status={stock} />
       </div>

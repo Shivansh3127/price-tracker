@@ -125,10 +125,27 @@ async function playwrightScrapePDP(url, headed = false) {
       }
     });
 
-    // ── Step 2: Navigate directly to the product detail page ──
+    // ── Step 2a: Accept consent on listing page (same session) ─
+    // The store stores consent in React state / localStorage — NOT in browser
+    // cookies. A fresh browser context starts with no consent → the cookie
+    // overlay (position:fixed, z-index:9999) appears on the PDP and
+    // intercepts ALL mouse events, preventing the hover reveal from working.
+    // Visiting the listing page briefly and accepting the banner sets the
+    // localStorage key so the overlay never appears on the PDP.
+    await page.goto(STORE_BASE, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
+    await page.waitForTimeout(1000);
+    try {
+      await page.waitForSelector('.cookie-banner', { state: 'visible', timeout: 5000 });
+      await page.click('.cookie-actions .btn-primary');
+      await page.waitForTimeout(600);
+      console.log('[scraper] Consent accepted on listing page');
+    } catch (_) {
+      // No banner — consent already set or banner didn't appear
+    }
+
+    // ── Step 2b: Navigate to PDP ───────────────────────────────
     // Use 'load' (not 'networkidle') — PDP has background polls that
     // prevent networkidle from ever firing (causes 30s timeout).
-    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(url, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
     await page.waitForSelector('.price-block', { state: 'visible', timeout: 15000 });
     await page.waitForTimeout(2000); // allow React to fully hydrate
@@ -136,11 +153,12 @@ async function playwrightScrapePDP(url, headed = false) {
     // Get product name
     const name = await page.textContent('h1').catch(() => null) || 'Unknown Product';
 
-    // ── Step 3: Trigger price reveal via zigzag mouse moves ────
+    // ── Step 3: Trigger price reveal via zigzag mouse moves ───
     // The price-block component requires:
     //   minMoves: 8   — at least 8 distinct mousemove events inside the element
     //   minDwellMs: 600 — cursor must stay ≥600 ms after first move
-    // A single hover() / dispatchEvent() satisfies neither requirement.
+    // Cookie overlay is already dismissed (same-session listing visit above),
+    // so all mouse events reach .price-block directly.
     await page.locator('.price-block').scrollIntoViewIfNeeded().catch(() => {});
     await page.waitForTimeout(300);
 
@@ -165,13 +183,13 @@ async function playwrightScrapePDP(url, headed = false) {
       console.warn('[scraper] Could not get bounding box for .price-block');
     }
 
-    // Wait for button to enable (up to 3s) then click
+    // Wait for button to enable (up to 6s) then click
     await page.waitForFunction(
       () => !document.querySelector('[aria-label="Reveal price"]')?.disabled,
-      { timeout: 3000 }
+      { timeout: 6000 }
     ).catch(() => console.warn('[scraper] Reveal button still disabled after hover'));
 
-    await page.click('[aria-label="Reveal price"]', { timeout: 3000 })
+    await page.click('[aria-label="Reveal price"]', { timeout: 5000 })
       .catch(() => page.evaluate(
         () => document.querySelector('[aria-label="Reveal price"]')?.click()
       ));

@@ -118,7 +118,7 @@ export default function SearchPage() {
 
                 {product.price != null && (
                   <p style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '1.2rem', marginBottom: '0.75rem' }}>
-                    ${product.price.toFixed(2)}
+                    ₹{product.price.toLocaleString('en-IN')}
                   </p>
                 )}
 

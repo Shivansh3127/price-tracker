@@ -14,7 +14,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     }}>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.3rem' }}>{label}</p>
       <p style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '1.1rem' }}>
-        ${payload[0].value?.toFixed(2)}
+        ₹{payload[0].value?.toLocaleString('en-IN')}
       </p>
     </div>
   );
@@ -57,7 +57,7 @@ export default function PriceChart({ history }) {
           <div key={label}>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
             <p style={{ color: label === 'Lowest' ? 'var(--accent-green)' : label === 'Highest' ? 'var(--accent-rose)' : 'var(--text-primary)', fontWeight: 700, fontSize: '1.1rem' }}>
-              ${value?.toFixed(2)}
+              ₹{value?.toLocaleString('en-IN')}
             </p>
           </div>
         ))}
@@ -79,7 +79,7 @@ export default function PriceChart({ history }) {
             tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={v => `$${v.toFixed(0)}`}
+            tickFormatter={v => `₹${v.toLocaleString('en-IN')}`}
           />
           <Tooltip content={<CustomTooltip />} />
           <ReferenceLine y={avgPrice} stroke="rgba(139,92,246,0.4)" strokeDasharray="4 4" />

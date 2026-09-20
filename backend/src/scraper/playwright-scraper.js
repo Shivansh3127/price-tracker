@@ -285,23 +285,29 @@ async function playwrightScrapeListings(_url, headed = false) {
   const browser = await chromium.launch(getLaunchOptions(headed));
   try {
     const page = await browser.newPage();
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // NOTE: do NOT call acceptCookies here — the cookie banner does not
+    // hide tiles (confirmed by debug endpoint: cookieVisible=true, tileCount=20).
+    // Clicking the banner was causing a brief page reload that made
+    // waitForSelector time out. Cookie acceptance is only needed in the
+    // PDP scraper to unlock the hidden price.
     await page.goto(STORE_BASE, { waitUntil: 'networkidle', timeout: PAGE_TIMEOUT_MS });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
 
-    await acceptCookies(page);
-
-    // Wait for at least one product tile
-    await page.waitForSelector('article.tile', { timeout: 15000 });
+    // Wait for at least one product tile (fail fast if 20s exceeded)
+    await page.waitForSelector('article.tile', { timeout: 20000 });
 
     // Extract data from all visible tiles
     const tiles = await page.evaluate((base) => {
       const cards = [...document.querySelectorAll('article.tile')];
       return cards.map(card => {
         const skuText  = card.querySelector('p.tile-sku')?.textContent?.trim() || '';
-        // SKU format: "SKU MER-10426" — extract the 5-digit number
-        const skuMatch = skuText.match(/(\d{5,})/);
+        // SKU format: "SKU MER-10426" — extract any run of 3+ digits
+        const skuMatch = skuText.match(/(\d{3,})/);
         const skuNum   = skuMatch ? parseInt(skuMatch[1], 10) : null;
-        const id       = skuNum ? skuNum - 10000 : null;
+        // Derive product page ID: e.g. MER-10426 → /product/426
+        const id       = skuNum && skuNum > 10000 ? skuNum - 10000 : skuNum;
         return {
           name        : card.querySelector('h3.tile-name')?.textContent?.trim()      || null,
           category    : card.querySelector('span.tile-category')?.textContent?.trim() || null,
@@ -309,7 +315,7 @@ async function playwrightScrapeListings(_url, headed = false) {
           sku         : skuText,
           url         : id ? `${base}/product/${id}` : null,
           thumbnailUrl: null,
-          price       : null,   // prices are not shown on listing page
+          price       : null,
         };
       }).filter(t => t.name && t.url);
     }, STORE_BASE);

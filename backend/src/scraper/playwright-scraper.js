@@ -85,13 +85,15 @@ function skuToProductId(skuText) {
  *   have been recorded INSIDE .price-block AND the cursor has dwelled ≥600 ms.
  *
  * Working strategy:
- *  1. Navigate directly to the PDP (no listing-page pre-visit needed).
- *  2. Intercept /api/layout to capture dynamic CSS class names.
- *  3. Scroll .price-block into view, then move the mouse from outside
- *     the element and make 15 zigzag moves inside it (70 ms apart).
- *  4. Dwell 900 ms (> minDwellMs:600).
- *  5. Wait for button to enable, then click it.
- *  6. Read price from the pv-* class element (zero-width spaces stripped
+ *  1. Navigate directly to the PDP.
+ *  2. Dismiss cookie overlay on PDP (same-session localStorage set — no
+ *     listing-page pre-visit needed, saves ~6-7s per product).
+ *  3. Intercept /api/layout to capture dynamic CSS class names.
+ *  4. Scroll .price-block into view, then make 10 zigzag moves inside
+ *     it (50 ms apart, well above minMoves:8).
+ *  5. Dwell 700 ms (> minDwellMs:600 with margin).
+ *  6. Wait for button to enable, then click it.
+ *  7. Read price from the pv-* class element (zero-width spaces stripped
  *     by parsePrice via /[^\d.]/g replacement).
  *
  * @param {string}  url
@@ -125,30 +127,26 @@ async function playwrightScrapePDP(url, headed = false) {
       }
     });
 
-    // ── Step 2a: Accept consent on listing page (same session) ─
-    // The store stores consent in React state / localStorage — NOT in browser
-    // cookies. A fresh browser context starts with no consent → the cookie
-    // overlay (position:fixed, z-index:9999) appears on the PDP and
-    // intercepts ALL mouse events, preventing the hover reveal from working.
-    // Visiting the listing page briefly and accepting the banner sets the
-    // localStorage key so the overlay never appears on the PDP.
-    await page.goto(STORE_BASE, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
-    await page.waitForTimeout(1000);
-    try {
-      await page.waitForSelector('.cookie-banner', { state: 'visible', timeout: 5000 });
-      await page.click('.cookie-actions .btn-primary');
-      await page.waitForTimeout(600);
-      console.log('[scraper] Consent accepted on listing page');
-    } catch (_) {
-      // No banner — consent already set or banner didn't appear
-    }
-
-    // ── Step 2b: Navigate to PDP ───────────────────────────────
+    // ── Step 2a: Navigate to PDP ───────────────────────────────
     // Use 'load' (not 'networkidle') — PDP has background polls that
     // prevent networkidle from ever firing (causes 30s timeout).
     await page.goto(url, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
     await page.waitForSelector('.price-block', { state: 'visible', timeout: 15000 });
-    await page.waitForTimeout(2000); // allow React to fully hydrate
+
+    // ── Step 2b: Dismiss cookie overlay ON THE PDP (saves ~7s vs listing visit)
+    // The store stores consent in localStorage — NOT in browser cookies.
+    // The same overlay that appears on the listing page also appears on the
+    // PDP. Dismissing it here is equivalent and avoids a full extra page load.
+    try {
+      await page.waitForSelector('.cookie-banner', { state: 'visible', timeout: 2000 });
+      await page.click('.cookie-actions .btn-primary');
+      await page.waitForTimeout(400);
+      console.log('[scraper] Consent accepted on PDP');
+    } catch (_) {
+      // No banner — already accepted
+    }
+
+    await page.waitForTimeout(600); // allow React to fully hydrate (was 2000ms)
 
     // Get product name
     const name = await page.textContent('h1').catch(() => null) || 'Unknown Product';
@@ -157,28 +155,25 @@ async function playwrightScrapePDP(url, headed = false) {
     // The price-block component requires:
     //   minMoves: 8   — at least 8 distinct mousemove events inside the element
     //   minDwellMs: 600 — cursor must stay ≥600 ms after first move
-    // Cookie overlay is already dismissed (same-session listing visit above),
-    // so all mouse events reach .price-block directly.
+    // Cookie overlay is already dismissed above so all events reach .price-block.
     await page.locator('.price-block').scrollIntoViewIfNeeded().catch(() => {});
-    await page.waitForTimeout(300);
 
     const box = await page.locator('.price-block').boundingBox().catch(() => null);
     if (box) {
       // Start from outside the price block so React detects entry
       await page.mouse.move(box.x - 80, box.y - 80);
-      await page.waitForTimeout(100);
 
-      // 15 zigzag moves inside the block (well above minMoves:8)
-      for (let i = 0; i < 15; i++) {
+      // 10 zigzag moves inside the block (above minMoves:8) at 50ms each
+      for (let i = 0; i < 10; i++) {
         const x = box.x + box.width  * (0.1 + 0.8 * ((i % 5) / 4));
-        const y = box.y + box.height * (0.2 + 0.6 * (Math.floor(i / 5) / 3));
+        const y = box.y + box.height * (0.2 + 0.6 * (Math.floor(i / 5) / 2));
         await page.mouse.move(x, y);
-        await page.waitForTimeout(70);
+        await page.waitForTimeout(50); // was 70ms
       }
 
-      // Dwell 900 ms at centre (well above minDwellMs:600)
+      // Dwell 700 ms at centre (minDwellMs:600 + 100ms margin)
       await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
-      await page.waitForTimeout(900);
+      await page.waitForTimeout(700); // was 900ms
     } else {
       console.warn('[scraper] Could not get bounding box for .price-block');
     }
@@ -208,7 +203,7 @@ async function playwrightScrapePDP(url, headed = false) {
       { timeout: 12000 }
     ).catch(() => {}); // continue even if timeout
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(300); // was 1000ms
 
     // ── Step 6: Read price ─────────────────────────────────────
     let priceText = null;

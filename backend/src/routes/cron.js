@@ -96,4 +96,67 @@ router.get('/status', (_req, res) => {
   });
 });
 
+// POST /api/cron/refresh  → public manual trigger (called from frontend UI)
+// Rate-limited to once per 60 s to prevent button-spam.
+// No auth — the token is kept server-side only.
+let lastRefreshAt = 0;
+const REFRESH_COOLDOWN_MS = 60_000; // 60 seconds
+
+router.post('/refresh', async (req, res) => {
+  const now = Date.now();
+  const elapsed = now - lastRefreshAt;
+
+  if (elapsed < REFRESH_COOLDOWN_MS) {
+    const waitSec = Math.ceil((REFRESH_COOLDOWN_MS - elapsed) / 1000);
+    return res.status(429).json({
+      error: `Please wait ${waitSec}s before refreshing again`,
+      retryAfterSec: waitSec,
+    });
+  }
+
+  lastRefreshAt = now;
+
+  res.status(202).json({
+    message  : 'Refresh accepted — scraping in background',
+    startedAt: new Date().toISOString(),
+  });
+
+  setImmediate(async () => {
+    console.log(`[refresh] Manual refresh triggered at ${new Date().toISOString()}`);
+
+    let tracked;
+    try {
+      const { data, error } = await supabase
+        .from('tracked_products')
+        .select('*, products(*)')
+        .eq('is_active', true);
+
+      if (error) throw error;
+      tracked = data || [];
+    } catch (err) {
+      console.error('[refresh] Failed to fetch tracked products:', err.message);
+      return;
+    }
+
+    if (tracked.length === 0) {
+      console.log('[refresh] No active tracked products');
+      return;
+    }
+
+    const results = { success: 0, failed: 0 };
+    for (const item of tracked) {
+      try {
+        const result = await scrapeTrackedProduct(item, false);
+        if (result.success) results.success++;
+        else                results.failed++;
+      } catch (err) {
+        results.failed++;
+        console.error(`[refresh] Error for product ${item.product_id}:`, err.message);
+      }
+    }
+
+    console.log(`[refresh] Done — success: ${results.success}, failed: ${results.failed}`);
+  });
+});
+
 module.exports = router;

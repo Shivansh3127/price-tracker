@@ -34,4 +34,8 @@ export const api = {
 
   // ── Scrape Logs ───────────────────────────────────────────────
   getLogs: (productId) => request(`/api/logs/${productId}`),
+
+  // ── Manual Refresh ────────────────────────────────────────────
+  triggerRefresh: () =>
+    request('/api/cron/refresh', { method: 'POST' }),
 };

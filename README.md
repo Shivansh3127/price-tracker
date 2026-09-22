@@ -1,9 +1,9 @@
 # Product Price Tracker
 
-A full-stack web app that monitors product prices and stock status on the [INE mock store](https://demo.inelabteamdev.com/). Users search for products, add them to a watchlist, and see price history charts updated automatically every 2 hours by a background scraper. Built for the INE Software Engineer Intern assignment.
+A full-stack web app that monitors product prices and stock status on the [INE mock store](https://demo.inelabteamdev.com/). Users search for products, add them to a watchlist, and see price history charts updated automatically every 15 minutes by a background scraper. Built for the INE Software Engineer Intern assignment.
 
 **Live links:**
-- 🌐 Frontend: `<LIVE_FRONTEND_URL>` *(replace after Vercel deploy)*
+- 🌐 Frontend: https://price-tracker-chi-seven.vercel.app/
 - 🔌 Backend API: `https://price-tracker-backend-5re1.onrender.com`
 - 📦 Repo: `https://github.com/Shivansh3127/price-tracker`
 
